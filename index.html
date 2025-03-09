@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mines Game by premz</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ffcc00;
+            margin-bottom: 1.5rem;
+        }
+
+        .balance {
+            font-size: 1.25rem;
+            color: #d1d5db;
+            margin-bottom: 1rem;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        input[type="number"] {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #4b5563;
+            background-color: #374151;
+            color: #fff;
+            width: 120px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #facc15;
+            box-shadow: 0 0 5px rgba(250, 204, 21, 0.5);
+        }
+
+        button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        #startBtn {
+            background-color: #ef4444;
+        }
+
+        #startBtn:hover {
+            background-color: #dc2626;
+        }
+
+        #cashoutBtn {
+            background-color: #22c55e;
+            display: none;
+        }
+
+        #cashoutBtn:hover {
+            background-color: #16a34a;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 60px);
+            gap: 5px;
+            margin: 0 auto 1.5rem;
+            width: 310px;
+        }
+
+        .tile {
+            width: 60px;
+            height: 60px;
+            background-color: #4b5563;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.5rem;
+            transition: transform 0.2s ease, background-color 0.3s ease;
+        }
+
+        .tile:hover {
+            transform: scale(1.05);
+        }
+
+        .tile.revealed {
+            animation: reveal 0.3s ease forwards;
+        }
+
+        .tile.revealed.gem {
+            background-color: #00cc00; /* Green gems */
+        }
+
+        .tile.revealed.mine {
+            background-color: #ef4444; /* Fixed red for bombs */
+        }
+
+        #status {
+            font-size: 1rem;
+            color: #9ca3af;
+        }
+
+        @keyframes reveal {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mines Game</h1>
+        <div class="balance">Balance: $<span id="balance">1000</span></div>
+        <div class="controls">
+            <input type="number" id="betAmount" placeholder="Bet Amount" min="1" max="1000">
+            <input type="number" id="mineCount" placeholder="Mines (1-24)" min="1" max="24">
+            <button id="startBtn" onclick="startGame()">Start Game</button>
+            <button id="cashoutBtn" onclick="cashout()">Cash Out</button>
+        </div>
+        <div class="grid" id="grid"></div>
+        <div id="status">Enter bet and mine count to start</div>
+    </div>
+
+    <!-- Audio for bomb sound -->
+    <audio id="bombSound" src="anime-ahh.mp3" preload="auto"></audio>
+
+    <script>
+        let balance = 1000;
+        let currentBet = 0;
+        let mines = [];
+        let revealed = 0;
+        let gameActive = false;
+        let multiplier = 1;
+
+        const grid = document.getElementById('grid');
+        const status = document.getElementById('status');
+        const balanceDisplay = document.getElementById('balance');
+        const bombSound = document.getElementById('bombSound');
+
+        function startGame() {
+            if (gameActive) return;
+
+            const bet = parseFloat(document.getElementById('betAmount').value);
+            const mineCount = parseInt(document.getElementById('mineCount').value);
+
+            if (isNaN(bet) || bet <= 0 || bet > balance) {
+                status.textContent = 'Invalid bet amount';
+                return;
+            }
+            if (isNaN(mineCount) || mineCount < 1 || mineCount > 24) {
+                status.textContent = 'Mines must be between 1 and 24';
+                return;
+            }
+
+            currentBet = bet;
+            balance -= bet;
+            balanceDisplay.textContent = balance.toFixed(2);
+            gameActive = true;
+            revealed = 0;
+            multiplier = 1;
+            document.getElementById('cashoutBtn').style.display = 'inline-block';
+
+            grid.innerHTML = '';
+            mines = generateMines(mineCount);
+            for (let i = 0; i < 25; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.dataset.index = i;
+                tile.addEventListener('click', revealTile);
+                grid.appendChild(tile);
+            }
+
+            status.textContent = 'Game started! Reveal tiles to find gems.';
+        }
+
+        function generateMines(count) {
+            const mines = new Set();
+            while (mines.size < count) {
+                mines.add(Math.floor(Math.random() * 25));
+            }
+            return Array.from(mines);
+        }
+
+        function revealTile(e) {
+            if (!gameActive) return;
+
+            const index = parseInt(e.target.dataset.index);
+            if (e.target.classList.contains('revealed')) return;
+
+            e.target.classList.add('revealed');
+            if (mines.includes(index)) {
+                e.target.classList.add('mine');
+                e.target.textContent = '💣';
+                bombSound.play(); // Play explosion sound when bomb is clicked
+                endGame(false);
+            } else {
+                e.target.classList.add('gem');
+                e.target.textContent = '💎';
+                revealed++;
+                multiplier = calculateMultiplier(revealed, mines.length);
+                status.textContent = `Multiplier: ${multiplier.toFixed(2)}x | Potential Win: $${(currentBet * multiplier).toFixed(2)}`;
+            }
+        }
+
+        function calculateMultiplier(revealed, mineCount) {
+            const base = 1 + (mineCount * 0.1);
+            return base + (revealed * (mineCount / 25));
+        }
+
+        function cashout() {
+            if (!gameActive) return;
+
+            const winnings = currentBet * multiplier;
+            balance += winnings;
+            balanceDisplay.textContent = balance.toFixed(2);
+            gameActive = false;
+            document.getElementById('cashoutBtn').style.display = 'none';
+            status.textContent = `Cashed out! Won $${winnings.toFixed(2)}`;
+            revealAllMines();
+        }
+
+        function endGame(won) {
+            gameActive = false;
+            document.getElementById('cashoutBtn').style.display = 'none';
+            status.textContent = won ? 'You won!' : 'Game over! You hit a mine.';
+            revealAllMines();
+        }
+
+        function revealAllMines() {
+            const tiles = grid.children;
+            for (let i = 0; i < 25; i++) {
+                if (mines.includes(i) && !tiles[i].classList.contains('revealed')) {
+                    tiles[i].classList.add('revealed', 'mine');
+                    tiles[i].textContent = '💣';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
